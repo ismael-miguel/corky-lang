@@ -4,7 +4,7 @@ Check the previous example to see how to make a basic "hello world" program.
 
 Creates a string and stores the string "hello, world!" into it:
 
-:define:~0:text :store:cons@"hello, world!"
+:define:text:~0 :store:cons@"hello, world!"
 
 :import@text > still needed, no escape sequences
 
