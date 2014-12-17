@@ -50,5 +50,21 @@ For example, using :likethis won't cause an error, because it doesn't exist.
 
 Only recognized commands will be parsed.
 
+To separate parameters or sub-commands, the @ char is used.
+
 You can check the file `examples/hello_world.cork` to see how to make a runnable file.
 
+*Variables*
+
+A variable is defined by a tilde (`~`) MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
+
+I uses the following structure: :define:<data-type>:~<number> with an onpional :store:const@<value> matching the same type.
+
+The final result would be like this:
+
+    :define:text:~0 :store@"Nice no?"
+    :define:static:~1:store@123
+
+Whitespace doesn't matter: it can be safely removed.
+
+The `:store` command can be only used with the `:define` command or by itself, specifying a variable and the value to use that matches the same type.
