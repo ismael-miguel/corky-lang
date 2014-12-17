@@ -8,4 +8,6 @@ First we need to import the module "text" for string manipulation
 
 	:cons@"hello, world!" < we create a constant of type "text" to hand it over for output
 	
-	:text@NEWLINE < constants are ALWAYS with capitals
+	:text@newline < this is a cool constant
+
+And this is how you make a hello world in corky!
