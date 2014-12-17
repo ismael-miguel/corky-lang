@@ -1,0 +1,17 @@
+This is a file showing how to make an improved "hello world" program.
+
+Check the previous example to see how to make a basic "hello world" program.
+
+Creates a string and stores the string "hello, world!" into it:
+
+:define:~0:text :store:cons@"hello, world!"
+
+:import@text > still needed, no escape sequences
+
+:echo
+	
+	:~0 
+	
+	:text@newline
+
+And this is how you make an improved hello world in corky!
