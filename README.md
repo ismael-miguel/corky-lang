@@ -29,25 +29,26 @@ This makes this file a perfect valid corky program.
 
 Corky has a few basic datatypes:
 
- - `text` : a set of characters (equivalent to `string`)
- - `static` : a fixed, 0-decimal long numberic type (equivalent to `int`)
- - `dynamic` : a floating-point numerical type (equivalent to `float`)
- - `error` : a special type for pre-defined errors (equivalent to `Exception`s)
- - `:null` : no value at all
+ - `:text`    : a set of characters (equivalent to `string`)
+ - `:static`  : a fixed, 0-decimal long numberic type (equivalent to `int`)
+ - `:dynamic` : a floating-point numerical type (equivalent to `float`)
+ - `:error`   : a special type for pre-defined errors (equivalent to `Exception`s)
+ - `:null`    : no value at all
 
 Corky also supports structures:
- - `list` : an array of values with the same type (equivalent to `array`)
- - `dict` : a dictionary containing properties (equivalent to `Object`)
+ - `:list@<type>` : an array of values with the same type (equivalent to `array`)
+ - `:dict`        : a dictionary containing properties (equivalent to `Object`) **Can't contain functions**
+ - `:obj`         : defined an object (equivalent to `Object`) **Must contain the function `:text`**
 
 **Basic syntax**
 
 The syntax is really basic:
 
-Everything followed by `:` is seen as a token.
+Everything followed by `:` is seen as a token. To avoid it of being interpreted, use `::`, like `::this`
 
 Not everything will be evaluated as such!
 
-For example, using `:likethis` won't cause an error, because it doesn't exist.
+For example, using :likethis won't cause an error, because it doesn't exist.
 
 Only recognized commands will be parsed.
 
@@ -65,28 +66,29 @@ To create a constant, use `:cons@<value>`.
 
 The type is guessed based on the provided data: `:cons@"this is a :text "` and `:cons@0` is a `:static` constant (`:cons@0.0` would make a `:dynamic` constant). These can be evaluated right away since they won't change during the execution.
 
-You **must** create constants for everything! It's the only way.
+You **must** create constants for everything! It's the only way!
 
 **Pre-defined constants**
 
 There is a number of pre-defined constants:
 
- - `:compiler` - Contains information about the compiler it is running in
-  - `@system` - OS name and version
-  - `@file` - Name of the file being read
-  - `@version` - Version number (E.g.: `cons@1.0`)
- - `:version` - Alias for `:compiler@version`
- - `:null` - Constant of type `:null`
- - `:true` - Equivalent to `:cons@1`
- - `:false` - Equivalent to `:cons@0`
- - `:scope@depth` - Current depth
- - `:scope@maxdepth` - Maximum depth
- - `:args@~<num>` - Constant `:list` with all the arguments of a function
- 	On the global `:scope`, this will be a `:dict` with all the passed arguments.
+ - `:compiler` 		- Contains information about the compiler it is running in
+  - `@system` 		- OS name and version
+  - `@file` 		- Name of the file being read
+  - `@version` 		- Version number (E.g.: `cons@1.0`)
+ - `:version` 		- Alias for `:compiler@version`
+ - `:null`			- Constant of type `:null`
+ - `:true` 			- Equivalent to `:cons@1`
+ - `:false`			- Equivalent to `:cons@0`
+ - `:scope@depth`	- Current depth
+ - `:scope@maxdepth`- Maximum depth
+ - `:args@~<num>` 	- Constant `:list` with all the arguments of a function
+ 	On the global `:scope`, this will be a `:dict` with all the passed arguments
+ - `:this` 			- This constant is **only** available inside `:func` that belong to a certain `:obj`
 
 **Variables**
 
-A variable is defined by a tilde (`~`) MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
+A variable is defined by a tilde (`~`) AND MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
 
 I uses the following structure: `:define:<data-type>:~<number>` with an optional `:store:cons@<value>` matching the same type.
 
@@ -99,6 +101,12 @@ Whitespace doesn't matter: it can be safely removed.
 
 The `:store` command can be only used with the `:define` command or by itself, specifying a variable and the value to use that matches the same type.
 
+**Output**
+
+Output is created using the `:echo` or `:echo:format`. The later is used to output formatted text (like C's `printf()` function).
+
+Everything can generate output, even `:obj`'s!
+
 Structures
 ==========
 
@@ -110,7 +118,23 @@ Corky has a few different structures, all of which have different uses.
 
 When a `:scope` is created, the variables inside it won't be exposed outside. However, using the syntax `:^`, you can access the variables on the parent `:scope`.
 
-**functions**
+To end a scope, use `:end:scope` or `:end@scope`.
+
+Variables inside these blocks aren't exposed outside (they are self-contained).
+
+**Inline `:scope` blocks**
+
+You can throw a `:scope` block nearly anywhere!
+
+An example:
+
+    :define:static:~0
+    :scope
+     :define:text:~0:store:cons@"This won't cause errors"
+    :end:scope
+    :echo:~0 < echoes `null`
+
+**Functions**
 
 Functions can be created using the `:define` instruction.
 
@@ -148,3 +172,4 @@ Also, recursion is made really easy:
     :^&<func name>
 
 All those refer to the same function: the function your `:scope` is in.
+
