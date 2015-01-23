@@ -74,8 +74,8 @@ I uses the following structure: `:define:<data-type>:~<number>` with an optional
 
 The final result would be like this:
 
-    :define:text:~0 :store@"Nice no?"
-    :define:static:~1:store@123
+    :define:text:~0 :store:const@"Nice no?"
+    :define:static:~1:store:const@123
 
 Whitespace doesn't matter: it can be safely removed.
 
