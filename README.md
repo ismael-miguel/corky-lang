@@ -78,7 +78,7 @@ There is a number of pre-defined constants:
  - `:version` - Alias for `:compiler@version`
  - `:null` - Constant of type `:null`
  - `:true` - Equivalent to `:cons@1`
- - `:false` - Equivalent to `cont@0`
+ - `:false` - Equivalent to `:cons@0`
  - `:scope@depth` - Current depth
  - `:scope@maxdepth` - Maximum depth
 
