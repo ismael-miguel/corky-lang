@@ -54,6 +54,18 @@ To separate parameters or sub-commands, the `@` char is used.
 
 You can check the file `examples/hello_world.cork` to see how to make a runnable file.
 
+**Constants**
+
+Constants have a special structure.
+
+They are the most important part of Corky and the base of all types.
+
+To create a constant, use `:const@<value>`.
+
+The type is guessed based on the provided data: `:const@"this is a :text "` and `:const@0` is a `:static` constant (`:cont@0.0` would make a `:dynamic` constant). These can be evaluated right away since they won't change during the execution.
+
+You **must** create constants for everything! It's the only way.
+
 **Variables**
 
 A variable is defined by a tilde (`~`) MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
