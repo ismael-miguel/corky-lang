@@ -82,7 +82,7 @@ There is a number of pre-defined constants:
  - `:false`			- Equivalent to `:cons@0`
  - `:scope@depth`	- Current depth
  - `:scope@maxdepth`- Maximum depth
- - `:args@~<num>` 	- Constant `:list` with all the arguments of a function
+ - `:args@~<num>` 	- Constant `:list` with all the arguments of a function.<br>
  	On the global `:scope`, this will be a `:dict` with all the passed arguments
  - `:this` 			- This constant is **only** available inside `:func` that belong to a certain `:obj`
 
