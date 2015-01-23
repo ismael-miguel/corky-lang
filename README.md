@@ -29,7 +29,7 @@ This makes this file a perfect valid corky program.
 
 Corky has a few basic datatypes:
 
- - `text` : a string of characters (equivalent to `string`)
+ - `text` : a set of characters (equivalent to `string`)
  - `static` : a fixed, 0-decimal long numberic type (equivalent to `int`)
  - `dynamic` : a floating-point numerical type (equivalent to `float`)
  - `error` : a special type for pre-defined errors (equivalent to `Exception`s)
@@ -46,19 +46,19 @@ Everything followed by `:` is seen as a token.
 
 Not everything will be evaluated as such!
 
-For example, using :likethis won't cause an error, because it doesn't exist.
+For example, using `:likethis` won't cause an error, because it doesn't exist.
 
 Only recognized commands will be parsed.
 
-To separate parameters or sub-commands, the @ char is used.
+To separate parameters or sub-commands, the `@` char is used.
 
 You can check the file `examples/hello_world.cork` to see how to make a runnable file.
 
-*Variables*
+**Variables**
 
 A variable is defined by a tilde (`~`) MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
 
-I uses the following structure: :define:<data-type>:~<number> with an onpional :store:const@<value> matching the same type.
+I uses the following structure: `:define:<data-type>:~<number>` with an optional `:store:const@<value>` matching the same type.
 
 The final result would be like this:
 
@@ -68,3 +68,4 @@ The final result would be like this:
 Whitespace doesn't matter: it can be safely removed.
 
 The `:store` command can be only used with the `:define` command or by itself, specifying a variable and the value to use that matches the same type.
+
