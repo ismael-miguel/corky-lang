@@ -81,6 +81,8 @@ There is a number of pre-defined constants:
  - `:false` - Equivalent to `:cons@0`
  - `:scope@depth` - Current depth
  - `:scope@maxdepth` - Maximum depth
+ - `:args@~<num>` - Constant `:list` with all the arguments of a function
+ 	On the global `:scope`, this will be a `:dict` with all the passed arguments.
 
 **Variables**
 
@@ -97,8 +99,52 @@ Whitespace doesn't matter: it can be safely removed.
 
 The `:store` command can be only used with the `:define` command or by itself, specifying a variable and the value to use that matches the same type.
 
-**Structures: `:scope` blocks**
+Structures
+==========
+
+Corky has a few different structures, all of which have different uses.
+
+**`:scope` blocks**
 
 `:scope` blocks are used for many things: to create functions, in-line blocks, structures, decision blocks and loops.
 
-When a `:scope` is created, the variables inside it won't be exposed outside. However, using `:^<var num>`, you can access the variables on the parent `:scope`.
+When a `:scope` is created, the variables inside it won't be exposed outside. However, using the syntax `:^`, you can access the variables on the parent `:scope`.
+
+**functions**
+
+Functions can be created using the `:define` instruction.
+
+Each function can have multiple parameters, like so:
+
+    :define	< starts the definition
+     :func	< starts to define a function
+     :&0 	< function identifier
+     :fact	< optional function name
+
+Then you need to set the parameters for the function:
+
+    :param	< parameter keyword
+     :ref	< optional - reference
+     :opt	< optional - defines the parameter as optional
+     :static< data type
+     :~0	< optional - SEQUENTIAL parameter name
+
+The unnamed values can be accessed though the `:args@~<num>` constant.
+
+Functions can accept more parameters than the ones defined.
+
+Example of a function:
+
+    :define:func:&0:optname
+     :param:static:~0
+     :scope
+      :return:~0 < returns the parameter ~0
+     :end:scope
+
+Also, recursion is made really easy:
+
+    :&-1
+    :^&-1
+    :^&<func name>
+
+All those refer to the same function: the function your `:scope` is in.
