@@ -60,9 +60,9 @@ Constants have a special structure.
 
 They are the most important part of Corky and the base of all types.
 
-To create a constant, use `:const@<value>`.
+To create a constant, use `:cons@<value>`.
 
-The type is guessed based on the provided data: `:const@"this is a :text "` and `:const@0` is a `:static` constant (`:cont@0.0` would make a `:dynamic` constant). These can be evaluated right away since they won't change during the execution.
+The type is guessed based on the provided data: `:cons@"this is a :text "` and `:cons@0` is a `:static` constant (`:cons@0.0` would make a `:dynamic` constant). These can be evaluated right away since they won't change during the execution.
 
 You **must** create constants for everything! It's the only way.
 
@@ -70,12 +70,12 @@ You **must** create constants for everything! It's the only way.
 
 A variable is defined by a tilde (`~`) MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
 
-I uses the following structure: `:define:<data-type>:~<number>` with an optional `:store:const@<value>` matching the same type.
+I uses the following structure: `:define:<data-type>:~<number>` with an optional `:store:cons@<value>` matching the same type.
 
 The final result would be like this:
 
-    :define:text:~0 :store:const@"Nice no?"
-    :define:static:~1:store:const@123
+    :define:text:~0 :store:cons@"Nice no?"
+    :define:static:~1:store:cons@123
 
 Whitespace doesn't matter: it can be safely removed.
 
