@@ -33,6 +33,7 @@ Corky has a few basic datatypes:
  - `static` : a fixed, 0-decimal long numberic type (equivalent to `int`)
  - `dynamic` : a floating-point numerical type (equivalent to `float`)
  - `error` : a special type for pre-defined errors (equivalent to `Exception`s)
+ - `:null` : no value at all
 
 Corky also supports structures:
  - `list` : an array of values with the same type (equivalent to `array`)
@@ -66,6 +67,21 @@ The type is guessed based on the provided data: `:cons@"this is a :text "` and `
 
 You **must** create constants for everything! It's the only way.
 
+**Pre-defined constants**
+
+There is a number of pre-defined constants:
+
+ - `:compiler` - Contains information about the compiler it is running in
+  - `@system` - OS name and version
+  - `@file` - Name of the file being read
+  - `@version` - Version number (E.g.: `cons@1.0`)
+ - `:version` - Alias for `:compiler@version`
+ - `:null` - Constant of type `:null`
+ - `:true` - Equivalent to `:cons@1`
+ - `:false` - Equivalent to `cont@0`
+ - `:scope@depth` - Current depth
+ - `:scope@maxdepth` - Maximum depth
+
 **Variables**
 
 A variable is defined by a tilde (`~`) MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
@@ -81,3 +97,8 @@ Whitespace doesn't matter: it can be safely removed.
 
 The `:store` command can be only used with the `:define` command or by itself, specifying a variable and the value to use that matches the same type.
 
+**Structures: `:scope` blocks**
+
+`:scope` blocks are used for many things: to create functions, in-line blocks, structures, decision blocks and loops.
+
+When a `:scope` is created, the variables inside it won't be exposed outside. However, using `:^<var num>`, you can access the variables on the parent `:scope`.
