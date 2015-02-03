@@ -2,7 +2,7 @@ This is a file showing how to make a "hello world" program.
 
 First we need to import the module "text" for string manipulation
 
-:import:module@text < needed for the newline char
+:load@text < needed for the newline char
 
 :echo < similar to many languages
 
