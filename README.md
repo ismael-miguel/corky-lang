@@ -173,3 +173,34 @@ Also, recursion is made really easy:
 
 All those refer to the same function: the function your `:scope` is in.
 
+**Inline/anonymous/lambda functions**
+
+To create an inline function, simply pass a scope to any function that needs a function as a parameter.
+
+The data types will have to be cheched inside the function before using the arguments.
+
+
+Importing
+=========
+
+**Modules**
+
+Almost everything is made of modules.
+
+String manipulation, Math, Comparissons, Convertions, Filesystem access......
+
+To load a module you can simply do like this:
+
+    :load@<module name> :store:~0 <-- will be 0 or 1
+
+You can later check if a module is loaded, like this:
+
+    :loaded@<module name> :store:~0 <-- will be 0 or 1
+
+If a module isn't being used, it's recommened to:
+
+    :unload@<module name>
+
+None of this methods will raise an `:error`.
+
+
