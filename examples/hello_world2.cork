@@ -6,7 +6,7 @@ Creates a string and stores the string "hello, world!" into it:
 
 :define:text:~0 :store:cons@"hello, world!"
 
-:import:module@text > still needed, no escape sequences
+:load@text > still needed, no escape sequences
 
 :echo
 	
