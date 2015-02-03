@@ -179,6 +179,68 @@ To create an inline function, simply pass a scope to any function that needs a f
 
 The data types will have to be cheched inside the function before using the arguments.
 
+Decision structures and loops
+=============================
+
+**`:case` blocks**
+
+A `:case` block works like an `if()` in other languages.
+
+You need to provide at least 1 value to be checked.
+
+Here is an example:
+
+    :case:~0
+        :scope
+            :echo:~0
+            :echo:cons@' <-- is equivalent to :true'
+        :end:scope
+    :case:default
+        :scope
+            :echo:~0
+            :echo:cons@' <-- is equivalent to :false or :default'
+        :end:scope
+    :end:case
+
+This is equivalent to the following code, for Javascript, C and the like:
+
+    if(var0)
+        print var0,' <-- is equivalent to :true';
+    else
+        print var0,' <-- is equivalent to :false or :default';
+        
+ The `:case:default` is an `else` and **cannot have any other instruction following it** except for a `:scope`.
+ 
+ **`:cicle` loop**
+ 
+ The `:cicle` loop is quite similar to a 'regular' `for(;;)` loop:
+ 
+    :cicle:~0:from:cons@0:to:cons@10
+    :scope
+        :echo:~0
+    :end:scope
+ 
+ This is the same as:
+ 
+     for(var i=0; i<10; i++)
+     {
+         print i;
+     }
+
+To go from a positive to a negative increment, swap the values.
+
+**`:cicle:though[...]:into` loop**
+
+This loop is used to move through each element in a `:dict` or `:list`.
+
+You use it like the following:
+
+    :cicle:though:~0:into:~1:~2
+    :scope
+        :echo:~2 <-- key name, optional
+        :echo:' contains '
+        :echo:~1 <-- value
+    :end:scope
 
 Importing
 =========
