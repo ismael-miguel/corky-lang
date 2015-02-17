@@ -85,12 +85,14 @@ There is a number of pre-defined constants:
  - `:args@~<num>` 	- Constant `:list` with all the arguments of a function.<br>
  	On the global `:scope`, this will be a `:dict` with all the passed arguments
  - `:this` 			- This constant is **only** available inside `:func` that belong to a certain `:obj`
+ - `:pragmas@<name>` - Contains all the values of all the default pragmas.<br>
+  You can always set pragmas to modules, which have to be accessed as `:pragmas:module:<module>:<pragma>`.
 
 **Variables**
 
 A variable is defined by a tilde (`~`) AND MUST be followed by a SEQUENTIAL integer number. There are no names for variables!
 
-I uses the following structure: `:define:<data-type>:~<number>` with an optional `:store:cons@<value>` matching the same type.
+It uses the following structure: `:define:<data-type>:~<number>` with an optional `:store:cons@<value>` matching the same type.
 
 The final result would be like this:
 
@@ -266,3 +268,30 @@ If a module isn't being used, it's recommened to:
 None of this methods will raise an `:error`.
 
 
+Pragmas
+========
+
+There are multiple pragmas that change the way that the language behaves.
+
+You **MUST** set them all at the top.
+
+You use the syntax `:pragma:<name>[:<value>]` or `:pragma:module:<module>:<pragma>[:<value>]`.<br>
+To fetch it, you use the constant `:pragmas`.<br>
+The value can only be `:cons@0` or `:cons@1`, being all other values handled as `:cons@1`.
+
+List of all the default `:pragmas`:
+
+ - `:null_as_false`				- Defines `:null` as the same as `:cons@0` (defaults to `:cons@1`).
+ - `:text_autoclose`			- Automatically closes a text line, only allowing single-line content.
+ - `:error_on_missing_module`	- Raises an `:error` when the module doesn't exist or fails to load
+ - `:carry_on_death`			- When an `:error` occurrs, the code won't stop running
+ - `:carry_on_type_mismatch`	- When an `:error@mismatch` occurrs, the code won't stop and an implicit convertion will happen (defaults to `:cons@1`)
+
+`:pragmas` for `:module`s:
+
+ - `:module:text`
+ 	- `:eol_window`				- Set the `:text@eol` as `:call:text@from_code:cons@13:cons@10:store:text@eol` on compile-time.
+ - `:module:dynamic`
+	 - `:mismatch_to_0`			- Defines if a mismatched value will be converted to `:cons@0`.
+ - `:module:static`
+	 - `:mismatch_to_0`			- Defines if a mismatched value will be converted to `:cons@0`.
