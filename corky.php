@@ -71,7 +71,8 @@ final class Corky_Parser {
 		'output' => array('echo', 'format'),
 		'scope' => array('scope', 'end'),
 		'decision' => array('case'),
-		'loop' => array('cycle', 'repeat')
+		'loop' => array('cycle', 'repeat'),
+		'ignore' => array('')
 	);
 	static private $token_group = array();
 	
@@ -314,6 +315,14 @@ abstract class Corky_Compiler {
 final class Corky_Compiler_PHP extends Corky_Compiler {
 	private $fn = null;
 	private $code = '';
+	private $data = array(
+		'vars' => array(),
+		'const' => array(
+			'true' => 1,
+			'false' => 0
+		),
+		'dedup' => array()
+	);
 	
 	protected $lexer = null;
 	private $methods = null;
@@ -347,13 +356,27 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 				return $result . implode(', ', $values) . ';';
 			},
 			'const' => function(&$token){
-				return str_replace('$', '\\$', $token['arg']['value']);
+				$value = $token['arg']['type'] === 'text'
+					? str_replace('$', '\\$', substr($token['arg']['value'], 1, -1))
+					: $token['arg']['value'];
+				
+				$pos = array_search($value, $this->data['dedup']);
+				
+				if($pos !== false)
+				{
+					return '$DATA[\'dedup\'][' . $pos . ']';
+				}
+				
+				$this->data['dedup'][] = $value;
+				
+				return '$DATA[\'dedup\'][' . (count($this->data['dedup']) - 1) . ']';
 			}
 		);
 	}
 	
 	protected function compile(){
 		$code = '';
+		
 		$methods = &$this->methods;
 		$tokens = $this->lexer->get_tokens();
 		
@@ -369,7 +392,12 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 			$iterator->next();
 		}
 		
-		$this->code = $code;
+		$this->code = '/* =========== data boilerplate =========== */' . PHP_EOL
+			. '$DATA = ' . var_export($this->data, true) . ';' . PHP_EOL
+			. '/* =========== data boilerplate =========== */' . PHP_EOL . PHP_EOL
+			. '/* =========== code to execute */' . PHP_EOL
+			. $code . PHP_EOL
+			. '/* =========== code to execute ============ */';
 	}
 	
 	function get_code(){
@@ -384,10 +412,15 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 	function execute(array $argv = array()){
 		if(!$this->fn)
 		{
-			$this->fn = eval('return (function(&$argv){' . $this->get_code() . '});');
+			$this->fn = eval(
+				'return (function(&\$argv){ '
+					. $this->get_code()
+				. ' });'
+			);
 		}
 		
-		// $this->fn($argv) will throw error (self::fn not found)
+		// $this->fn($argv)
+		// will throw error (class::fn not found)
 		$fn = &$this->fn;
 		return $fn($argv);
 	}
