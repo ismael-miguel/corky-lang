@@ -58,7 +58,7 @@ final class Corky_Parser {
 				|
 				(?P<dynamic>\d+\.\d*|\d*.\d+) # floating-point
 				| # https://stackoverflow.com/a/481294
-				(?P<text>"([^\\"]|\\\\|\\")*") # double-quoted escaped string
+				(?P<text>"([^\\"]|\\\\|\\")*?") # double-quoted escaped string
 			)
 		)?
 	)%Axis';
