@@ -313,29 +313,63 @@ abstract class Corky_Compiler {
 
 final class Corky_Compiler_PHP extends Corky_Compiler {
 	private $fn = null;
-	
 	private $code = '';
 	
+	protected $lexer = null;
 	private $methods = null;
 
 	function __construct(Corky_Lexer $lexer){
 		parent::__construct($lexer);
 		
-		self::$methods = array(
-			'echo' => function(){
+		$this->lexer = $lexer;
+		
+		$this->methods = array(
+			'echo' => function(&$token, &$iterator){
+				if(!$iterator->valid())
+				{
+					return '';
+				}
+				
 				$result = 'echo ';
+				
+				$iterator->next();
+				$next = $iterator->current();
+				$values = array();
+				
+				while($iterator->valid() && $next['group'] === 'value')
+				{
+					$values[] = $this->methods[$next['token']]($next, $iterator);
+				
+					$iterator->next();
+					$next = $iterator->current();
+				}
+				
+				return $result . implode(', ', $values) . ';';
 			},
 			'const' => function(&$token){
-				return $token['arg']['value'];
+				return str_replace('$', '\\$', $token['arg']['value']);
 			}
 		);
 	}
 	
 	protected function compile(){
-		// to do
+		$code = '';
+		$methods = &$this->methods;
+		$tokens = $this->lexer->get_tokens();
 		
-		$this->code = 'code';
-		$this->fn = function(){};
+		$iterator = new ArrayIterator($tokens);
+		while($iterator->valid())
+		{
+			$token = $iterator->current();
+			if(isset($methods[$token['token']]))
+			{
+				$code .= $methods[$token['token']]($token, $iterator);
+			}
+			
+			$iterator->next();
+		}
+		
+		$this->code = $code;
 	}
 	
 	function get_code(){
@@ -353,7 +387,9 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 			$this->fn = eval('return (function(&$argv){' . $this->get_code() . '});');
 		}
 		
-		return $this->fn($argv);
+		// $this->fn($argv) will throw error (self::fn not found)
+		$fn = &$this->fn;
+		return $fn($argv);
 	}
 }
 
@@ -389,7 +425,7 @@ final class Corky {
 		
 		$class = self::$languages[$lang];
 		
-		if(!$class || !class_exists($class))
+		if(!$class/* || !class_exists($class)*/)
 		{
 			throw new Corky_Exception_Invalid_Lang($lang);
 		}
