@@ -71,8 +71,7 @@ final class Corky_Parser {
 		'output' => array('echo', 'format'),
 		'scope' => array('scope', 'end'),
 		'decision' => array('case'),
-		'loop' => array('cycle', 'repeat'),
-		'ignore' => array('')
+		'loop' => array('cycle', 'repeat')
 	);
 	static private $token_group = array();
 	
@@ -316,7 +315,9 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 	private $fn = null;
 	private $code = '';
 	private $data = array(
-		'vars' => array(),
+		'vars' => array(
+			0 => array()
+		),
 		'const' => array(
 			'true' => 1,
 			'false' => 0
@@ -333,6 +334,25 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 		$this->lexer = $lexer;
 		
 		$this->methods = array(
+			'const' => function(&$token){
+				$value = $token['arg']['type'] === 'text'
+					? str_replace('$', '\\$', substr($token['arg']['value'], 1, -1))
+					: $token['arg']['value'];
+				
+				$pos = array_search($value, $this->data['dedup']);
+				
+				if($pos !== false)
+				{
+					return '$DATA[\'dedup\'][' . $pos . ']';
+				}
+				
+				$this->data['dedup'][] = $value;
+				
+				return '$DATA[\'dedup\'][' . (count($this->data['dedup']) - 1) . ']';
+			},
+			'var' => function(&$token){
+				return '$DATA[\'vars\'][$DATA[\'scope\']' . ($token['parent'] ? '-1' : '') . '][\'' . ($token['type'] === '~' ? 'var' : 'fn') . '\'][' . $token['identifier'] . ']' . (isset($token['arg']) ? '[\'' . $token['arg']['value'] . '\']' : '' );
+			},
 			'echo' => function(&$token, &$iterator){
 				if(!$iterator->valid())
 				{
@@ -354,22 +374,6 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 				}
 				
 				return $result . implode(', ', $values) . ';';
-			},
-			'const' => function(&$token){
-				$value = $token['arg']['type'] === 'text'
-					? str_replace('$', '\\$', substr($token['arg']['value'], 1, -1))
-					: $token['arg']['value'];
-				
-				$pos = array_search($value, $this->data['dedup']);
-				
-				if($pos !== false)
-				{
-					return '$DATA[\'dedup\'][' . $pos . ']';
-				}
-				
-				$this->data['dedup'][] = $value;
-				
-				return '$DATA[\'dedup\'][' . (count($this->data['dedup']) - 1) . ']';
 			}
 		);
 	}
