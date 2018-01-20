@@ -1,7 +1,46 @@
 <?php
 
+class Corky_Exception extends Exception {
+	public function __construct(Corky_Exception $class) {
+		$this->message = get_class($class) . ': ' . $class->message;
+	}
+
+	public function __toString() {
+		return $this->message;
+	}
+}
+
+final class Corky_Exception_No_Code extends Corky_Exception {
+	public function __construct() {
+	    $this->message = 'No code given, empty or wrong type';
+		parent::__construct($this);
+	}
+}
+
+final class Corky_Exception_Type_Error extends Corky_Exception {
+	public function __construct($message = 'Wrong type') {
+	    $this->message = $message . '';
+		parent::__construct($this);
+	}
+}
+final class Corky_Exception_Invalid_State extends Corky_Exception {
+	public function __construct($message = 'Invalid state') {
+	    $this->message = $message . '';
+		parent::__construct($this);
+	}
+}
+
+// lexer-specific
+final class Corky_Exception_Lexer_Syntax_Error extends Corky_Exception {
+	public function __construct($message = 'Syntax Error', $line = 0) {
+	    $this->message = $message . '';
+	    $this->line = $line . '';
+		parent::__construct($this);
+	}
+}
+
 final class Corky_Parser {
-	static private $regex = '/:
+	static private $regex = '%:
 	(?P<skip>:)? # skips the code if there is ::<rule>
 	(?:
 		(?P<var> # parses things like ^&-1 or ~0
@@ -22,7 +61,19 @@ final class Corky_Parser {
 				(?P<text>"([^\\"]|\\\\|\\")*") # double-quoted escaped string
 			)
 		)?
-	)/Axis';
+	)%Axis';
+	
+	static private $groups = array(
+		'attribution' => array('define', 'store'),
+		'data_type' => array('func', 'fn', 'static', 'dynamic', 'text'),
+		'data_structure' => array('list', 'dict', 'obj'),
+		'value' => array('var', 'const'),
+		'output' => array('echo', 'format'),
+		'scope' => array('scope', 'end'),
+		'decision' => array('case'),
+		'loop' => array('cycle', 'repeat')
+	);
+	static private $token_group = array();
 	
 	private static function tokenize_var(array $pieces) {
 		return array(
@@ -61,12 +112,34 @@ final class Corky_Parser {
 		return $token;
 	}
 	
-	static function parse($string){
-		$tokens = array();
-
-		$line = 1;
+	static function token_get_group(array $token) {
+		if(isset(self::$token_group[$token['token']]))
+		{
+			return self::$token_group[$token['token']];
+		}
+		
+		foreach(self::$groups as $group => &$tokens)
+		{
+			if(in_array($token['token'], $tokens))
+			{
+				return self::$token_group[$token['token']] = $group;
+			}
+		}
+		
+		return self::$token_group[$token['token']] = 'unknown';
+	}
+	
+	static function parse($data){
 		// make sure it's a string
-		$code = $string . '';
+		$code = $data . '';
+		
+		if(!$code)
+		{
+			throw new Corky_Exception_No_Code();
+		}
+		
+		$tokens = array();
+		$line = 1;
 
 		for($i = 0, $length = strlen($code); $i < $length; $i++)
 		{
@@ -107,6 +180,7 @@ final class Corky_Parser {
 							: self::tokenize_fn($pieces);
 						
 						$token['line'] = $line;
+						$token['group'] = self::token_get_group($token);
 						
 						$tokens[] = $token;
 					}
@@ -122,14 +196,6 @@ final class Corky_Lexer {
 	private $tokens = array();
 	private $code = '';
 	private $code_raw = '';
-	
-	private function parse(){
-		$this->tokens = Corky_Parser::parse($this->code_raw);
-	}
-	
-	function getTokens(){
-		return $this->tokens;
-	}
 	
 	function getCode(){
 		if(!$this->code_raw || $this->code)
@@ -166,12 +232,186 @@ final class Corky_Lexer {
 	function getRawCode(){
 		return $this->code_raw;
 	}
+	
+	function get_tokens(){
+		return $this->tokens;
+	}
+	
+	private function parse(){
+		$this->tokens = Corky_Parser::parse($this->code_raw);
+	}
+	
+	private function validate(){
+		$status = array(
+			'level' => 0,
+			'begin' => array()
+		);
+		
+		$rules = array(
+			'const' => function(&$token, &$iterator){
+				return isset($token['arg'])
+					&& in_array($token['arg']['type'], array('static', 'dynamic', 'text'))
+					&& isset($token['arg']['value']);
+			},
+			'echo' => function(&$token, &$iterator){
+				if(!$iterator->valid())
+				{
+					return false;
+				}
+				
+				$current_key = $iterator->key();
+				$iterator->next();
+				$next = $iterator->current();
+				$iterator->seek($current_key);
+				
+				return $next['group'] === 'value';
+			}
+		);
+		
+		$iterator = new ArrayIterator($this->tokens);
+		while($iterator->valid())
+		{
+			$token = $iterator->current();
+			if(
+				isset($rules[$token['token']])
+				&& !$rules[$token['token']]($token, $iterator)
+			)
+			{
+				throw new Corky_Exception_Lexer_Syntax_Error('Unexpected or invalid token ' . $token['token'], $token['line']);
+			}
+			
+			$iterator->next();
+		}
+	}
 
 	function __construct($code){
 		if($code)
 		{
 			$this->code_raw = $code;
 			$this->parse();
+			
+			if(!$this->tokens)
+			{
+				throw new Corky_Exception_Invalid_State('Parser returned an invalid token list');
+			}
+			
+			$this->validate();
 		}
+	}
+}
+
+abstract class Corky_Compiler {
+	protected $lexer;
+	
+	function __construct(Corky_Lexer $lexer){
+		$this->lexer = $lexer;
+	}
+	
+	abstract protected function compile();
+	abstract function get_code();
+}
+
+final class Corky_Compiler_PHP extends Corky_Compiler {
+	private $fn = null;
+	
+	private $code = '';
+	
+	private $methods = null;
+
+	function __construct(Corky_Lexer $lexer){
+		parent::__construct($lexer);
+		
+		self::$methods = array(
+			'echo' => function(){
+				$result = 'echo ';
+			},
+			'const' => function(&$token){
+				return $token['arg']['value'];
+			}
+		);
+	}
+	
+	protected function compile(){
+		// to do
+		
+		$this->code = 'code';
+		$this->fn = function(){};
+	}
+	
+	function get_code(){
+		if(!$this->code)
+		{
+			$this->compile();
+		}
+		
+		return $this->code;
+	}
+	
+	function execute(array $argv = array()){
+		if(!$this->fn)
+		{
+			$this->fn = eval('return (function(&$argv){' . $this->get_code() . '});');
+		}
+		
+		return $this->fn($argv);
+	}
+}
+
+final class Corky {
+	private $code_raw = '';
+	private static $languages = array(
+		'php' => 'Corky_Compiler_PHP'
+	);
+	
+	private $lexer = null;
+	private $compilers = array();
+	
+	function __construct($data){
+		$code = $data . '';
+		
+		if(!$code)
+		{
+			throw new Corky_Exception_No_Code();
+		}
+		
+		$this->code_raw = $code;
+		
+		$this->lexer = new Corky_Lexer($this->code_raw);
+	}
+	
+	function compile($lang){
+		$lang = strtolower($lang);
+		
+		if(isset($this->compilers[$lang]))
+		{
+			return $this->compilers[$lang];
+		}
+		
+		$class = self::$languages[$lang];
+		
+		if(!$class || !class_exists($class))
+		{
+			throw new Corky_Exception_Invalid_Lang($lang);
+		}
+		
+		$compiler = new $class($this->lexer);
+		
+		return $this->compilers[$lang] = $compiler;
+	}
+	
+	function define_lang($lang, $class){
+		self::$languages[$lang] = $class;
+	}
+	
+	function defined_langs(){
+		return array_keys(self::$languages);
+	}
+	
+	function get_raw_code(){
+		return $this->code_raw;
+	}
+	
+	function get_tokens(){
+		return $this->lexer->get_tokens();
 	}
 }
