@@ -32,8 +32,8 @@ final class Corky_Exception_Invalid_State extends Corky_Exception {
 
 // lexer-specific
 final class Corky_Exception_Lexer_Syntax_Error extends Corky_Exception {
-	public function __construct($message = 'Syntax Error', $line = 0) {
-	    $this->message = $message . '';
+	public function __construct($message = 'Syntax Error', $line = 0, array $token = null) {
+	    $this->message = ($token ? ':' . $token['token'] . ' - ' : '') . $message;
 	    $this->line = $line . '';
 		parent::__construct($this);
 	}
@@ -64,14 +64,15 @@ final class Corky_Parser {
 	)%Axis';
 	
 	static private $groups = array(
-		'attribution' => array('define', 'store'),
+		'attribution' => array('define'),
 		'data_type' => array('func', 'fn', 'static', 'dynamic', 'text'),
 		'data_structure' => array('list', 'dict', 'obj'),
-		'value' => array('var', 'const'),
-		'output' => array('echo', 'format'),
+		'value' => array('var', 'const', 'true', 'false', 'null'),
+		'output' => array('echo'),
 		'scope' => array('scope', 'end'),
 		'decision' => array('case'),
-		'loop' => array('cycle', 'repeat')
+		'loop' => array('cycle', 'repeat'),
+		'modifier' => array('format', 'to', 'from', 'through', 'into')
 	);
 	static private $token_group = array();
 	
@@ -86,7 +87,7 @@ final class Corky_Parser {
 	
 	private static function tokenize_fn(array $pieces) {
 		$token = array(
-			'token' => $pieces['fn']
+			'token' => strtolower($pieces['fn'])
 		);
 		
 		if(isset($pieces['arg']) && $pieces['arg'])
@@ -102,7 +103,9 @@ final class Corky_Parser {
 				{
 					$token['arg'] = array(
 						'type' => $type,
-						'value' => $pieces[$value]
+						'value' => $type === 'text'
+							? substr($pieces[$value], 1, -1) // remove quotes
+							: $pieces[$value]
 					);
 					break;
 				}
@@ -112,7 +115,7 @@ final class Corky_Parser {
 		return $token;
 	}
 	
-	static function token_get_group(array $token) {
+	static function token_get_group(array $token, array $last = null) {
 		if(isset(self::$token_group[$token['token']]))
 		{
 			return self::$token_group[$token['token']];
@@ -139,6 +142,7 @@ final class Corky_Parser {
 		}
 		
 		$tokens = array();
+		$last = null;
 		$line = 1;
 
 		for($i = 0, $length = strlen($code); $i < $length; $i++)
@@ -180,9 +184,10 @@ final class Corky_Parser {
 							: self::tokenize_fn($pieces);
 						
 						$token['line'] = $line;
-						$token['group'] = self::token_get_group($token);
+						$token['group'] = self::token_get_group($token, $last);
 						
 						$tokens[] = $token;
+						$last = $token;
 					}
 					break;
 			}
@@ -194,21 +199,391 @@ final class Corky_Parser {
 
 final class Corky_Lexer {
 	private $tokens = array();
-	private $code = '';
-	private $code_raw = '';
+	private $tree = array();
 	
-	function getCode(){
-		if(!$this->code_raw || $this->code)
+	function get_tokens(){
+		return $this->tokens;
+	}
+	
+	function get_tree(){
+		return $this->tree;
+	}
+	
+	private static function get_values(ArrayIterator &$iterator, $reset = false) {
+		$old_index = $iterator->key();
+		
+		$next = $iterator->current();
+		$tokens = array();
+		
+		while(
+			$next['group'] === 'value'
+			|| isset($next['arg'])
+		)
 		{
-			return $this->code;
+			$tokens[] = $next;
+			
+			if(!$iterator->valid())
+			{
+				break;
+			}
+			$iterator->next();
+			$next = $iterator->current();
 		}
 		
+		if($reset)
+		{
+			$iterator->seek($old_index);
+		}
+		else if($iterator->valid())
+		{
+		    $iterator->next();
+		}
+		
+		return $tokens;
+	}
+	
+	private function get_token_tree(array &$token, ArrayIterator &$iterator) {
+		static $methods = null;
+		if(!$methods)
+		{
+			$methods = array(
+				'echo' => function(&$token, &$iterator){
+					if(!$iterator->valid())
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $token['line'], $token);
+					}
+					
+					$tree = array(
+						'token' => $token
+					);
+					
+					$iterator->next();
+					$next = $iterator->current();
+					
+					if(
+						$next['token'] === 'format'
+						&& $next['group'] === 'modifier'
+					)
+					{
+						if(
+							!$next['arg']
+							|| ($next['arg']['type'] !== 'text')
+						)
+						{
+							throw new Corky_Exception_Lexer_Syntax_Error('argument of type text required', $next['line'], $next);
+						}
+						
+						$tree['format'] = $next['arg']['value'];
+						$iterator->next();
+					}
+					
+					$tree['args'] = self::get_values($iterator);
+					
+					if(!$tree['args'])
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('at least 1 argument is required', $token['line'], $token);
+					}
+					
+					return $tree;
+				},
+				'const' => function(&$token, &$iterator){
+					if(!$token['arg'])
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('at least 1 argument is required', $token['line'], $token);
+					}
+					
+					return array(
+						'token' => $token,
+						'value' => $token['arg']
+					);
+				},
+				'define' => function(&$token, &$iterator){
+					if(!$iterator->valid())
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $token['line'], $token);
+					}
+					
+					$tree = array(
+						'token' => $token
+					);
+					
+					$iterator->next();
+					$type = $iterator->current();
+					
+					if(
+						$type['group'] !== 'data_type'
+						&& $type['group'] !== 'data_structure'
+					)
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('invalid token group', $type['line'], $type);
+					}
+					
+					if(!$iterator->valid())
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $type['line'], $type);
+					}
+					
+					$iterator->next();
+					$var = $iterator->current();
+					
+					if($var['token'] !== 'var')
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('unexpected token ' . $var['token'] . ', expecting var', $var['line'], $token);
+					}
+					
+					$tree = array(
+						'token' => $token,
+						'type' => $type['token'],
+						'arg' => $var
+					);
+					
+					// last token, no value stored
+					if(!$iterator->valid())
+					{
+						return $tree;
+					}
+					
+					$iterator->next();
+					$store = $iterator->current();
+					
+					if($store['group'] !== 'modifier' && $store['token'] !== 'store')
+					{
+						$iterator->seek($iterator->key() - 1);
+						return $tree;
+					}
+					
+					if(!$iterator->valid())
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('value missing', $store['line'], $store);
+					}
+					
+					$iterator->next();
+					$value = $iterator->current();
+					
+					if($value['group'] !== 'value')
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error('unexpected token group ' . $value['group'], $value['line'], $store);
+					}
+					
+					$tree['store'] = $value;
+					
+					return $tree;
+				}
+			);
+		}
+		
+		return isset($methods[$token['token']])
+			? $methods[$token['token']]($token, $iterator)
+			: $token;
+	}
+	
+	private function build_tree(array $tokens) {
+		$tree = array();
+		$iterator = new ArrayIterator($tokens);
+		
+		while($iterator->valid())
+		{
+			$token = $iterator->current();
+			$tree[] = self::get_token_tree($token, $iterator);
+			$iterator->next();
+		}
+		
+		$this->tree = $tree;
+	}
+
+	function __construct($code){
+		if(!($code .= ''))
+		{
+			throw new Corky_Exception_No_Code();
+		}
+		
+		$tokens = Corky_Parser::parse($code . '');
+		
+		if(!$tokens)
+		{
+			throw new Corky_Exception_Invalid_State('Parser returned an invalid token list');
+		}
+		
+		$this->tokens = $tokens;
+		
+		$this->build_tree($tokens);
+	}
+}
+
+abstract class Corky_Compiler {
+	protected $lexer;
+	
+	function __construct(Corky_Lexer $lexer){
+		$this->lexer = $lexer;
+	}
+	
+	abstract protected function compile();
+	abstract function get_code();
+}
+
+final class Corky_Compiler_PHP extends Corky_Compiler {
+	const VERSION = '0.1';
+	
+	private $code = '';
+	// prevents duplicated constants
+	private $dedup = array();
+	// stores the compiled PHP lambda
+	private $fn = null;
+	
+	protected $lexer = null;
+	private $methods = null;
+
+	function __construct(Corky_Lexer $lexer){
+		parent::__construct($lexer);
+		
+		$this->lexer = $lexer;
+		
+		$this->methods = array(
+			'const' => function(&$token){
+				$value = $token['arg']['type'] === 'text'
+					? str_replace('$', '\\$', $token['arg']['value'])
+					: $token['arg']['value'];
+				
+				$pos = array_search($value, $this->dedup);
+				
+				if($pos !== false)
+				{
+					return '$DATA[\'dedup\'][' . $pos . ']';
+				}
+				
+				$this->dedup[] = $value;
+				
+				return '$DATA[\'dedup\'][' . (count($this->dedup) - 1) . ']';
+			},
+			'var' => function(&$token){
+				return '$DATA[\'vars\'][$DATA[\'const\'][\'scope\'][\'depth\']' . ($token['parent'] ? '-1' : '') . '][\'' . ($token['type'] === '~' ? 'var' : 'fn') . '\'][' . $token['identifier'] . ']' . (isset($token['arg']) ? '[\'' . $token['arg']['value'] . '\']' : '' );
+			},
+			'echo' => function(&$token){
+				$values = array();
+				
+				foreach($token['args'] as $arg)
+				{
+					if(isset($this->methods[$arg['token']]))
+					{
+						$values[] = $this->methods[$arg['token']]($arg);
+					}
+				}
+				
+				return sprintf(
+					isset($token['format'])
+						? 'printf("' . str_replace('%', '%%', $token['format']) . '", %s);'
+						: 'echo %s;',
+					implode(', ', $values)
+				);
+			},
+			'define' => function(&$token){
+				return $this->methods['var']($token['arg'])
+					. ' = '
+					. (
+						isset($token['store'])
+							? $this->methods[$token['store']['token']]($token['store'])
+							: '$DATA[\'const\'][\'null\']'
+					) . ';';
+			}
+		);
+	}
+	
+	protected function compile(){
+		$code = '';
+		$methods = &$this->methods;
+		
+		foreach($this->lexer->get_tree() as $token)
+		{
+			if(isset($methods[$token['token']['token']]))
+			{
+				$code .= $methods[$token['token']['token']]($token) . PHP_EOL;
+			}
+		}
+		
+		$dedup = var_export($this->dedup, true);
+		
+		$this->code = <<<PHP
+/*             data boilerplate             */
+
+\$DATA = array(
+	'vars' => array(
+		0 => array(
+			'var' => array(),
+			'fn' => array()
+		)
+	),
+	'const' => array(
+		'true' => 1,
+		'false' => 0,
+		'default' => 0,
+		'null' => null,
+		'args' => \$argv,
+		'scope' => array(
+			'depth' => 0,
+			'maxdepth' => 10
+		),
+		'compiler' => array(
+			'system' => 'PHP',
+			'file' => '',
+			'version' => Corky_Compiler_PHP::VERSION
+		)
+	),
+	'dedup' => {$dedup}
+);
+
+/* =========== data boilerplate =========== */
+/*             code to execute              */
+
+{$code}
+
+/* =========== code to execute ============ */
+PHP;
+	}
+	
+	function get_code(){
+		if(!$this->code)
+		{
+			$this->compile();
+		}
+		
+		return $this->code;
+	}
+	
+	function execute(array $argv = array()){
+		if(!$this->fn)
+		{
+			$this->fn = eval(
+				'return (function(array &$argv){ '
+					. $this->get_code()
+				. ' });'
+			);
+		}
+		
+		// $this->fn($argv)
+		// will throw error (class::fn not found)
+		$fn = &$this->fn;
+		return $fn($argv);
+	}
+}
+/*
+final class Corky_Compiler_Corky extends Corky_Compiler {
+	private $code = '';
+	
+	protected $lexer = null;
+
+	function __construct(Corky_Lexer $lexer){
+		parent::__construct($lexer);
+		
+		$this->lexer = $lexer;
+	}
+	
+	protected function compile(){
 		$code = '';
 		$last_line = 0;
 		
-		foreach($this->tokens as $token)
+		foreach($this->lexer->get_tokens() as $token)
 		{
-			$code .= ($last_line && $token['line'] > $last_line ? "\r\n": '') . ':';
+			$code .= ($last_line && $token['line'] > $last_line ? "\r\n" : '') . ':';
 			
 			$last_line = $token['line'];
 			
@@ -229,181 +604,6 @@ final class Corky_Lexer {
 		return $this->code = $code;
 	}
 	
-	function getRawCode(){
-		return $this->code_raw;
-	}
-	
-	function get_tokens(){
-		return $this->tokens;
-	}
-	
-	private function parse(){
-		$this->tokens = Corky_Parser::parse($this->code_raw);
-	}
-	
-	private function validate(){
-		$status = array(
-			'level' => 0,
-			'begin' => array()
-		);
-		
-		$rules = array(
-			'const' => function(&$token, &$iterator){
-				return isset($token['arg'])
-					&& in_array($token['arg']['type'], array('static', 'dynamic', 'text'))
-					&& isset($token['arg']['value']);
-			},
-			'echo' => function(&$token, &$iterator){
-				if(!$iterator->valid())
-				{
-					return false;
-				}
-				
-				$current_key = $iterator->key();
-				$iterator->next();
-				$next = $iterator->current();
-				$iterator->seek($current_key);
-				
-				return $next['group'] === 'value';
-			}
-		);
-		
-		$iterator = new ArrayIterator($this->tokens);
-		while($iterator->valid())
-		{
-			$token = $iterator->current();
-			if(
-				isset($rules[$token['token']])
-				&& !$rules[$token['token']]($token, $iterator)
-			)
-			{
-				throw new Corky_Exception_Lexer_Syntax_Error('Unexpected or invalid token ' . $token['token'], $token['line']);
-			}
-			
-			$iterator->next();
-		}
-	}
-
-	function __construct($code){
-		if($code)
-		{
-			$this->code_raw = $code;
-			$this->parse();
-			
-			if(!$this->tokens)
-			{
-				throw new Corky_Exception_Invalid_State('Parser returned an invalid token list');
-			}
-			
-			$this->validate();
-		}
-	}
-}
-
-abstract class Corky_Compiler {
-	protected $lexer;
-	
-	function __construct(Corky_Lexer $lexer){
-		$this->lexer = $lexer;
-	}
-	
-	abstract protected function compile();
-	abstract function get_code();
-}
-
-final class Corky_Compiler_PHP extends Corky_Compiler {
-	private $fn = null;
-	private $code = '';
-	private $data = array(
-		'vars' => array(
-			0 => array()
-		),
-		'const' => array(
-			'true' => 1,
-			'false' => 0
-		),
-		'dedup' => array()
-	);
-	
-	protected $lexer = null;
-	private $methods = null;
-
-	function __construct(Corky_Lexer $lexer){
-		parent::__construct($lexer);
-		
-		$this->lexer = $lexer;
-		
-		$this->methods = array(
-			'const' => function(&$token){
-				$value = $token['arg']['type'] === 'text'
-					? str_replace('$', '\\$', substr($token['arg']['value'], 1, -1))
-					: $token['arg']['value'];
-				
-				$pos = array_search($value, $this->data['dedup']);
-				
-				if($pos !== false)
-				{
-					return '$DATA[\'dedup\'][' . $pos . ']';
-				}
-				
-				$this->data['dedup'][] = $value;
-				
-				return '$DATA[\'dedup\'][' . (count($this->data['dedup']) - 1) . ']';
-			},
-			'var' => function(&$token){
-				return '$DATA[\'vars\'][$DATA[\'scope\']' . ($token['parent'] ? '-1' : '') . '][\'' . ($token['type'] === '~' ? 'var' : 'fn') . '\'][' . $token['identifier'] . ']' . (isset($token['arg']) ? '[\'' . $token['arg']['value'] . '\']' : '' );
-			},
-			'echo' => function(&$token, &$iterator){
-				if(!$iterator->valid())
-				{
-					return '';
-				}
-				
-				$result = 'echo ';
-				
-				$iterator->next();
-				$next = $iterator->current();
-				$values = array();
-				
-				while($iterator->valid() && $next['group'] === 'value')
-				{
-					$values[] = $this->methods[$next['token']]($next, $iterator);
-				
-					$iterator->next();
-					$next = $iterator->current();
-				}
-				
-				return $result . implode(', ', $values) . ';';
-			}
-		);
-	}
-	
-	protected function compile(){
-		$code = '';
-		
-		$methods = &$this->methods;
-		$tokens = $this->lexer->get_tokens();
-		
-		$iterator = new ArrayIterator($tokens);
-		while($iterator->valid())
-		{
-			$token = $iterator->current();
-			if(isset($methods[$token['token']]))
-			{
-				$code .= $methods[$token['token']]($token, $iterator);
-			}
-			
-			$iterator->next();
-		}
-		
-		$this->code = '/* =========== data boilerplate =========== */' . PHP_EOL
-			. '$DATA = ' . var_export($this->data, true) . ';' . PHP_EOL
-			. '/* =========== data boilerplate =========== */' . PHP_EOL . PHP_EOL
-			. '/* =========== code to execute */' . PHP_EOL
-			. $code . PHP_EOL
-			. '/* =========== code to execute ============ */';
-	}
-	
 	function get_code(){
 		if(!$this->code)
 		{
@@ -412,23 +612,7 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 		
 		return $this->code;
 	}
-	
-	function execute(array $argv = array()){
-		if(!$this->fn)
-		{
-			$this->fn = eval(
-				'return (function(&\$argv){ '
-					. $this->get_code()
-				. ' });'
-			);
-		}
-		
-		// $this->fn($argv)
-		// will throw error (class::fn not found)
-		$fn = &$this->fn;
-		return $fn($argv);
-	}
-}
+}*/
 
 final class Corky {
 	private $code_raw = '';
@@ -486,5 +670,9 @@ final class Corky {
 	
 	function get_tokens(){
 		return $this->lexer->get_tokens();
+	}
+	
+	function get_tree(){
+		return $this->lexer->get_tree();
 	}
 }
