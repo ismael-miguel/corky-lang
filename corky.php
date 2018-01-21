@@ -34,7 +34,16 @@ final class Corky_Exception_Invalid_State extends Corky_Exception {
 final class Corky_Exception_Lexer_Syntax_Error extends Corky_Exception {
 	public function __construct($message = 'Syntax Error', $line = 0, array $token = null) {
 	    $this->message = ($token ? ':' . $token['token'] . ' - ' : '') . $message;
-	    $this->line = $line . '';
+	    $this->line = +$line;
+		parent::__construct($this);
+	}
+}
+
+// runtine-specific
+final class Corky_Exception_Compiler_PHP_Runtime extends Corky_Exception {
+	public function __construct($message, $line = 0) {
+	    $this->message = $message;
+	    $this->line = +$line;
 		parent::__construct($this);
 	}
 }
@@ -58,7 +67,7 @@ final class Corky_Parser {
 				|
 				(?P<dynamic>\d+\.\d*|\d*.\d+) # floating-point
 				| # https://stackoverflow.com/a/481294
-				(?P<text>"([^\\"]|\\\\|\\")*?") # double-quoted escaped string
+				(?P<text>"([^\\\\"]|\\\\\\\\|\\\\")*?")# double-quoted escaped string
 			)
 		)?
 	)%Axis';
@@ -287,7 +296,7 @@ final class Corky_Lexer {
 					return $tree;
 				},
 				'const' => function(&$token, &$iterator){
-					if(!$token['arg'])
+					if(!isset($token['arg']))
 					{
 						throw new Corky_Exception_Lexer_Syntax_Error('at least 1 argument is required', $token['line'], $token);
 					}
@@ -422,7 +431,7 @@ abstract class Corky_Compiler {
 }
 
 final class Corky_Compiler_PHP extends Corky_Compiler {
-	const VERSION = '0.1';
+	const VERSION = 0.1;
 	
 	private $code = '';
 	// prevents duplicated constants
@@ -439,24 +448,33 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 		$this->lexer = $lexer;
 		
 		$this->methods = array(
-			'const' => function(&$token){
+			'const' => function(&$token, array &$context = null){
+				static $value_only = array('echo');
+				
 				$value = $token['arg']['type'] === 'text'
-					? str_replace('$', '\\$', $token['arg']['value'])
+					? '"' . str_replace('$', '\\$', $token['arg']['value']) . '"'
 					: $token['arg']['value'];
 				
-				$pos = array_search($value, $this->dedup);
-				
-				if($pos !== false)
-				{
-					return '$DATA[\'dedup\'][' . $pos . ']';
-				}
-				
-				$this->dedup[] = $value;
-				
-				return '$DATA[\'dedup\'][' . (count($this->dedup) - 1) . ']';
+				return isset($context) && in_array($context['token'], $value_only)
+					? $value
+					: 'array(\'value\' => ' . $value . ', \'type\' => \'' . $token['arg']['type'] .'\')';
 			},
-			'var' => function(&$token){
-				return '$DATA[\'vars\'][$DATA[\'const\'][\'scope\'][\'depth\']' . ($token['parent'] ? '-1' : '') . '][\'' . ($token['type'] === '~' ? 'var' : 'fn') . '\'][' . $token['identifier'] . ']' . (isset($token['arg']) ? '[\'' . $token['arg']['value'] . '\']' : '' );
+			'var' => function(&$token, array &$context = null){
+				static $types = array(
+					'~' => 'var',
+					'&' => 'fn'
+				);
+				
+				static $method = array(
+					'echo' => 'value'
+				);
+				
+				$method = $context && isset($method[$context['token']])
+					? '_' . $method[$context['token']]
+					: '';
+				
+				// to do: array index
+				return 'Corky_Compiler_PHP_Runtime::get_' . $types[$token['type']] . $method . '($DATA, ' . $token['identifier'] . ', ' . (+!!$token['parent']) . ')';
 			},
 			'echo' => function(&$token){
 				$values = array();
@@ -465,7 +483,7 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 				{
 					if(isset($this->methods[$arg['token']]))
 					{
-						$values[] = $this->methods[$arg['token']]($arg);
+						$values[] = $this->methods[$arg['token']]($arg, $token['token']);
 					}
 				}
 				
@@ -477,13 +495,19 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 				);
 			},
 			'define' => function(&$token){
-				return $this->methods['var']($token['arg'])
-					. ' = '
-					. (
-						isset($token['store'])
-							? $this->methods[$token['store']['token']]($token['store'])
-							: '$DATA[\'const\'][\'null\']'
-					) . ';';
+				return 'Corky_Compiler_PHP_Runtime::create_var($DATA, '
+					. $token['arg']['identifier']
+					. ', \'' . $token['type'] . '\''
+				. ');'
+				. PHP_EOL
+				. 'Corky_Compiler_PHP_Runtime::set_var($DATA, '
+					. $token['arg']['identifier']
+					. ', '
+					. (isset($token['store'])
+						? $this->methods[$token['store']['token']]($token['store'])
+						: 'array(\'type\' => \'' . $token['type'] . '\', \'value\' => $DATA[\'const\'][\'null\'])'
+					)
+				. ');';
 			}
 		);
 	}
@@ -507,25 +531,29 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 
 \$DATA = array(
 	'vars' => array(
+		-1 => array(
+			'var' => &\$argv,
+			'fn' => array()
+		),
 		0 => array(
 			'var' => array(),
 			'fn' => array()
 		)
 	),
 	'const' => array(
-		'true' => 1,
-		'false' => 0,
-		'default' => 0,
-		'null' => null,
-		'args' => \$argv,
+		'true' => array('type' => 'static', 'value' => 1),
+		'false' => array('type' => 'static', 'value' => 0),
+		'default' => array('type' => 'static', 'value' => 0),
+		'null' => array('type' => 'null', 'value' => null),
+		'args' => &\$argv,
 		'scope' => array(
-			'depth' => 0,
-			'maxdepth' => 10
+			'depth' => array('type' => 'static', 'value' => 0),
+			'maxdepth' => array('type' => 'static', 'value' => 10)
 		),
 		'compiler' => array(
 			'system' => 'PHP',
 			'file' => '',
-			'version' => Corky_Compiler_PHP::VERSION
+			'version' => array('type' => 'dynamic', 'value' => Corky_Compiler_PHP::VERSION)
 		)
 	),
 	'dedup' => {$dedup}
@@ -565,6 +593,65 @@ PHP;
 		return $fn($argv);
 	}
 }
+
+final class Corky_Compiler_PHP_Runtime {
+	static function get_scope(&$DATA){
+		return $DATA['const']['scope']['depth']['value'];
+	}
+	
+	static function set_var(&$DATA, $index, array $value){
+		$scope = self::get_scope($DATA);
+		
+		$var = self::get_var($DATA, $index);
+		
+		if(
+			$value['type'] !== 'null'
+			&& $var['type'] !== $value['type'] 
+		)
+		{
+			throw new Corky_Exception_Compiler_PHP_Runtime('type mismatch, expected ' . $var['type'] . ', got ' . $value['type']);
+		}
+		
+		$DATA['vars'][$scope]['var'][$index] = array(
+			'type' => $value['type'],
+			'value' => $value['value']
+		);
+	}
+	
+	static function get_var(&$DATA, $index, $parent = false){
+		$scope = self::get_scope($DATA) - (!!$parent);
+		
+		if(!isset($DATA['vars'][$scope]['var'][$index]))
+		{
+			throw new Corky_Exception_Compiler_PHP_Runtime('undefined var ' . $index . ' on scope ' . $scope);
+		}
+		
+		$var = &$DATA['vars'][$scope]['var'][$index];
+		return $var;
+	}
+	
+	static function get_var_value(&$DATA, $index, $parent = false){
+		$var = self::get_var($DATA, $index, $parent);
+		$value = &$var['value'];
+		
+		return $value;
+	}
+	
+	static function create_var(&$DATA, $index, $type){
+		$scope = self::get_scope($DATA);
+		
+		if($index != 0 && !isset($DATA['vars'][$scope]['var'][$index - 1]))
+		{
+			throw new Corky_Exception_Compiler_PHP_Runtime('undefined var ' . ($index - 1) . ' on scope ' . $scope);
+		}
+		
+		$DATA['vars'][$scope]['var'][$index] = array(
+			'type' => $type,
+			'value' => null
+		);
+	}
+}
+
 /*
 final class Corky_Compiler_Corky extends Corky_Compiler {
 	private $code = '';
