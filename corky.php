@@ -61,13 +61,14 @@ final class Corky_Parser {
 		(?P<fn>[a-z][a-z_]*)
 		(?:@
 			(?P<arg>
+				# https://stackoverflow.com/a/481294
+				(?P<text>"([^\\\\"]|\\\\\\\\|\\\\")*?")# double-quoted escaped string
+				|
 				(?P<fn_arg>[a-z_]+) # function name
 				|
 				(?P<static>\d+) # integer
 				|
 				(?P<dynamic>\d+\.\d*|\d*.\d+) # floating-point
-				| # https://stackoverflow.com/a/481294
-				(?P<text>"([^\\\\"]|\\\\\\\\|\\\\")*?")# double-quoted escaped string
 			)
 		)?
 	)%Axis';
@@ -99,7 +100,7 @@ final class Corky_Parser {
 			'token' => strtolower($pieces['fn'])
 		);
 		
-		if(isset($pieces['arg']) && $pieces['arg'])
+		if(isset($pieces['arg']) && $pieces['arg'] !== '')
 		{
 			foreach(array('fn' => 'fn_arg', 'static', 'dynamic', 'text') as $type => $value)
 			{
@@ -108,7 +109,7 @@ final class Corky_Parser {
 					$type = $value;
 				}
 				
-				if(isset($pieces[$value]) && $pieces[$value])
+				if(isset($pieces[$value]) && $pieces[$value] !== '')
 				{
 					$token['arg'] = array(
 						'type' => $type,
