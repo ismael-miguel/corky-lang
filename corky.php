@@ -12,20 +12,20 @@ class Corky_Exception extends Exception {
 
 final class Corky_Exception_No_Code extends Corky_Exception {
 	public function __construct() {
-	    $this->message = 'No code given, empty or wrong type';
+		$this->message = 'No code given, empty or wrong type';
 		parent::__construct($this);
 	}
 }
 
 final class Corky_Exception_Type_Error extends Corky_Exception {
 	public function __construct($message = 'Wrong type') {
-	    $this->message = $message . '';
+		$this->message = $message . '';
 		parent::__construct($this);
 	}
 }
 final class Corky_Exception_Invalid_State extends Corky_Exception {
 	public function __construct($message = 'Invalid state') {
-	    $this->message = $message . '';
+		$this->message = $message . '';
 		parent::__construct($this);
 	}
 }
@@ -33,8 +33,8 @@ final class Corky_Exception_Invalid_State extends Corky_Exception {
 // lexer-specific
 final class Corky_Exception_Lexer_Syntax_Error extends Corky_Exception {
 	public function __construct($message = 'Syntax Error', $line = 0, array $token = null) {
-	    $this->message = ($token ? ':' . $token['token'] . ' - ' : '') . $message;
-	    $this->line = +$line;
+		$this->message = ($token ? ':' . $token['token'] . ' - ' : '') . $message;
+		$this->line = +$line;
 		parent::__construct($this);
 	}
 }
@@ -42,8 +42,8 @@ final class Corky_Exception_Lexer_Syntax_Error extends Corky_Exception {
 // runtine-specific
 final class Corky_Exception_Compiler_PHP_Runtime extends Corky_Exception {
 	public function __construct($message, $line = 0) {
-	    $this->message = $message;
-	    $this->line = +$line;
+		$this->message = $message;
+		$this->line = +$line;
 		parent::__construct($this);
 	}
 }
@@ -250,7 +250,7 @@ final class Corky_Lexer {
 		}
 		else if($iterator->valid())
 		{
-		    $iterator->next();
+			$iterator->next();
 		}
 		
 		return $tokens;
@@ -329,7 +329,7 @@ final class Corky_Lexer {
 						&& $type['group'] !== 'data_structure'
 					)
 					{
-						throw new Corky_Exception_Lexer_Syntax_Error('invalid token group', $type['line'], $type);
+						throw new Corky_Exception_Lexer_Syntax_Error('unexpected token group ' . $type['group'], $type['line'], $token);
 					}
 					
 					if(!$iterator->valid())
@@ -532,7 +532,7 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 		$dedup = var_export($this->dedup, true);
 		
 		$this->code = <<<PHP
-/*             data boilerplate             */
+/*			 data boilerplate			 */
 
 \$DATA = array(
 	'vars' => array(
@@ -565,7 +565,7 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 );
 
 /* =========== data boilerplate =========== */
-/*             code to execute              */
+/*			 code to execute			  */
 
 {$code}
 
