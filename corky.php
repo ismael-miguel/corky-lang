@@ -72,7 +72,7 @@ final class Corky_Parser {
 				|
 				(?P<static>\d+) # integer
 				|
-				(?P<unknown>[^:]*)# no type
+				(?P<unknown>[^:\s]*)# no type
 			)
 		)?
 	)%Axis';
