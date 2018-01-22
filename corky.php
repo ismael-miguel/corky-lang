@@ -68,9 +68,11 @@ final class Corky_Parser {
 				|
 				~(?P<index>\d+) # index
 				|
+				(?P<dynamic>\d+\.\d*|\d*.\d+) # floating-point
+				|
 				(?P<static>\d+) # integer
 				|
-				(?P<dynamic>\d+\.\d*|\d*.\d+) # floating-point
+				(?P<unknown>[^:]*)# no type
 			)
 		)?
 	)%Axis';
@@ -104,7 +106,7 @@ final class Corky_Parser {
 		
 		if(isset($pieces['arg']) && $pieces['arg'] !== '')
 		{
-			foreach(array('fn' => 'fn_arg', 'static', 'dynamic', 'text', 'index') as $type => $value)
+			foreach(array('fn' => 'fn_arg', 'static', 'dynamic', 'text', 'index', 'unknown') as $type => $value)
 			{
 				if(is_numeric($type))
 				{
