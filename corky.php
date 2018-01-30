@@ -223,6 +223,131 @@ final class Corky_Lexer {
 		return $this->tree;
 	}
 	
+	private static function assert(array $token, array $rules, ArrayIterator &$iterator, $throw = true){
+		static $methods = null;
+		
+		if(!$methods)
+		{
+			$methods = array(
+				'last' => function(&$value, &$token, &$iterator, $throw){
+					if($iterator->valid() !== !$value)
+					{
+						if($throw)
+						{
+							throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $token['line'], $token);
+						}
+						return false;
+					}
+					return true;
+				},
+				'arg' => function(&$value)use(&$value, &$token, &$iterator, $throw){
+					if(is_bool($value))
+					{
+						if($value && (!isset($token['arg']) || !$token['arg']))
+						{
+							if($throw)
+							{
+								throw new Corky_Exception_Lexer_Syntax_Error('argument required', $token['line'], $token);
+							}
+							return false;
+						}
+						elseif(!$value && (isset($token['arg']) || $token['arg']))
+						{
+							if($throw)
+							{
+								throw new Corky_Exception_Lexer_Syntax_Error('argument not allowed', $token['line'], $token);
+							}
+							return false;
+						}
+					}
+					elseif(is_array($value))
+					{
+						if(!isset($token['arg']) || !$token['arg'])
+						{
+							if($throw)
+							{
+								throw new Corky_Exception_Lexer_Syntax_Error('argument required', $token['line'], $token);
+							}
+							return false;
+						}
+						
+						foreach($value as $rule_name => &$rule_value)
+						{
+							if(!is_array($rule_value) && $rule_value !== $token['arg'][$rule_name])
+							{
+								if($throw)
+								{
+									throw new Corky_Exception_Lexer_Syntax_Error('argument with ' . $rule_name . ' of ' . $rule_value . ' expected, ' . $rule_name . ' ' . $token['arg'][$rule_name] . ' given', $token['line'], $token);
+								}
+								return false;
+							}
+							elseif(is_array($rule_value) && in_array($token['arg'][$rule_name], $rule_value))
+							{
+								if($throw)
+								{
+									throw new Corky_Exception_Lexer_Syntax_Error('argument with ' . $rule_name . ' in (' . implode(', ', $rule_value) . ') expected; ' . $rule_name . ' ' . $token['arg'][$rule_name] . ' given', $token['line'], $token);
+								}
+								return false;
+							}
+						}
+					}
+					return true;
+				}
+			);
+		}
+		
+		foreach($rules as $rule_name => &$rule_value)
+		{
+			if(isset($methods[$rule_name]))
+			{
+				if(!$methods[$rule_name]($rule_value, $token, $iterator, $throw))
+				{
+					return false;
+				}
+			}
+			elseif(is_bool($rule_value))
+			{
+				if($rule_value && (!isset($token[$rule_name]) || !$token[$rule_name]))
+				{
+					if($throw)
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' required, none given', $token['line'], $token);
+					}
+					return false;
+				}
+				elseif(!$rule_value && (isset($token[$rule_name]) || $token[$rule_name]))
+				{
+					if($throw)
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' not allowed', $token['line'], $token);
+					}
+					return false;
+				}
+			}
+			elseif(is_array($rule_value))
+			{
+				if(!in_array($token[$rule_name], $rule_value))
+				{
+					if($throw)
+					{
+						throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' in (' . implode(', ', $rule_value) . ') expected; ' . $rule_name . ' ' . $token[$rule_name] . ' given', $token['line'], $token);
+					}
+					return false;
+				}
+			}
+			elseif($rule_value != $token[$rule_name])
+			{
+				if($throw)
+				{
+					throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' required to be ' . $rule_value . ', ' . $rule_name . ' ' . $token[$rule_name] . ' given', $token['line'], $token);
+				}
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
 	private static function get_values(ArrayIterator &$iterator, $reset = false) {
 		$old_index = $iterator->key();
 		
@@ -262,10 +387,7 @@ final class Corky_Lexer {
 		{
 			$methods = array(
 				'echo' => function(&$token, &$iterator){
-					if(!$iterator->valid())
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $token['line'], $token);
-					}
+					self::assert($token, array('last' => false), $iterator);
 					
 					$tree = array(
 						'token' => $token
@@ -275,17 +397,10 @@ final class Corky_Lexer {
 					$next = $iterator->current();
 					
 					if(
-						$next['token'] === 'format'
-						&& $next['group'] === 'modifier'
+						self::assert($next, array('token' => 'format', 'group' => 'modifier'), $iterator, false)
 					)
 					{
-						if(
-							!$next['arg']
-							|| ($next['arg']['type'] !== 'text')
-						)
-						{
-							throw new Corky_Exception_Lexer_Syntax_Error('argument of type text required', $next['line'], $next);
-						}
+						self::assert($next, array('arg' => array('type' => array(null, 'text'))), $iterator);
 						
 						$tree['format'] = $next['arg']['value'];
 						$iterator->next();
@@ -301,10 +416,7 @@ final class Corky_Lexer {
 					return $tree;
 				},
 				'const' => function(&$token, &$iterator){
-					if(!isset($token['arg']))
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('at least 1 argument is required', $token['line'], $token);
-					}
+					self::assert($token, array('arg' => true), $iterator);
 					
 					return array(
 						'token' => $token,
@@ -312,10 +424,7 @@ final class Corky_Lexer {
 					);
 				},
 				'define' => function(&$token, &$iterator){
-					if(!$iterator->valid())
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $token['line'], $token);
-					}
+					self::assert($token, array('last' => false), $iterator);
 					
 					$tree = array(
 						'token' => $token
@@ -324,35 +433,31 @@ final class Corky_Lexer {
 					$iterator->next();
 					$type = $iterator->current();
 					
-					if(
-						$type['group'] !== 'data_type'
-						&& $type['group'] !== 'data_structure'
-					)
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('unexpected token group ' . $type['group'], $type['line'], $token);
-					}
-					
-					if(!$iterator->valid())
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $type['line'], $type);
-					}
+					self::assert($type,
+						array(
+							'last' => false,
+							'group' => array('data_type', 'data_structure')
+						),
+						$iterator
+					);
 					
 					$iterator->next();
 					$var = $iterator->current();
 					
-					if($var['token'] !== 'var')
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('unexpected token ' . $var['token'] . ', expecting var', $var['line'], $token);
-					}
+					self::assert($var, array('token' => 'var'), $iterator);
 					
 					$tree = array(
 						'token' => $token,
 						'type' => $type['token'],
-						'arg' => $var
+						'arg' => $var,
+						'store' => array(
+							'type' => $type['token'],
+							'value' => null
+						)
 					);
 					
 					// last token, no value stored
-					if(!$iterator->valid())
+					if(self::assert($var, array('last' => true), $iterator, false))
 					{
 						return $tree;
 					}
@@ -360,24 +465,20 @@ final class Corky_Lexer {
 					$iterator->next();
 					$store = $iterator->current();
 					
-					if($store['group'] !== 'modifier' && $store['token'] !== 'store')
+					// next token isn't a "store" token
+					if(self::assert($store, array('token' => 'store', 'group' => 'modifier'), $iterator, false))
 					{
+						// roll back! (there's no ArrayIterator->prev() method ???)
 						$iterator->seek($iterator->key() - 1);
 						return $tree;
 					}
 					
-					if(!$iterator->valid())
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('value missing', $store['line'], $store);
-					}
+					self::assert($store, array('last' => false), $iterator);
 					
 					$iterator->next();
 					$value = $iterator->current();
 					
-					if($value['group'] !== 'value')
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error('unexpected token group ' . $value['group'], $value['line'], $store);
-					}
+					self::assert($value, array('group' => 'value'), $iterator);
 					
 					$tree['store'] = $value;
 					
@@ -585,11 +686,7 @@ PHP;
 	function execute(array $argv = array()){
 		if(!$this->fn)
 		{
-			$this->fn = eval(
-				'return (function(array &$argv){ '
-					. $this->get_code()
-				. ' });'
-			);
+			$this->fn = eval('return (function(array &$argv){ ' . $this->get_code() . ' });');
 		}
 		
 		// $this->fn($argv)
