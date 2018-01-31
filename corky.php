@@ -446,15 +446,7 @@ final class Corky_Lexer {
 					
 					self::assert($var, array('token' => 'var'), $iterator);
 					
-					$tree = array(
-						'token' => $token,
-						'type' => $type['token'],
-						'arg' => $var,
-						'store' => array(
-							'type' => $type['token'],
-							'value' => null
-						)
-					);
+					$tree = array('token' => $token, 'type' => $type['token'], 'arg' => $var);
 					
 					// last token, no value stored
 					if(self::assert($var, array('last' => true), $iterator, false))
@@ -466,7 +458,7 @@ final class Corky_Lexer {
 					$store = $iterator->current();
 					
 					// next token isn't a "store" token
-					if(self::assert($store, array('token' => 'store', 'group' => 'modifier'), $iterator, false))
+					if(!self::assert($store, array('token' => 'store', 'group' => 'modifier'), $iterator, false))
 					{
 						// roll back! (there's no ArrayIterator->prev() method ???)
 						$iterator->seek($iterator->key() - 1);
@@ -526,26 +518,31 @@ final class Corky_Lexer {
 }
 
 abstract class Corky_Compiler {
-	protected $lexer;
+	protected $lexer = null;
+	protected $code = '';
 	
 	function __construct(Corky_Lexer $lexer){
 		$this->lexer = $lexer;
 	}
 	
 	abstract protected function compile();
-	abstract function get_code();
+	
+	function get_code(){
+		if(!$this->code)
+		{
+			$this->compile();
+		}
+		
+		return $this->code;
+	}
 }
 
 final class Corky_Compiler_PHP extends Corky_Compiler {
 	const VERSION = 0.1;
 	
-	private $code = '';
-	// prevents duplicated constants
-	private $dedup = array();
 	// stores the compiled PHP lambda
 	private $fn = null;
 	
-	protected $lexer = null;
 	private $methods = null;
 
 	function __construct(Corky_Lexer $lexer){
@@ -605,15 +602,15 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 					. $token['arg']['identifier']
 					. ', \'' . $token['type'] . '\''
 				. ');'
-				. PHP_EOL
-				. 'Corky_Compiler_PHP_Runtime::set_var($DATA, '
-					. $token['arg']['identifier']
-					. ', '
-					. (isset($token['store'])
-						? $this->methods[$token['store']['token']]($token['store'])
-						: 'array(\'type\' => \'' . $token['type'] . '\', \'value\' => $DATA[\'const\'][\'null\'])'
-					)
-				. ');';
+				. (isset($token['store'])
+					? PHP_EOL
+					. 'Corky_Compiler_PHP_Runtime::set_var($DATA, '
+						. $token['arg']['identifier']
+						. ', '
+							. $this->methods[$token['store']['token']]($token['store'])
+					. ');'
+					: ''
+				);
 			}
 		);
 	}
@@ -629,8 +626,6 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 				$code .= $methods[$token['token']['token']]($token) . PHP_EOL;
 			}
 		}
-		
-		$dedup = var_export($this->dedup, true);
 		
 		$this->code = <<<PHP
 /*			 data boilerplate			 */
@@ -661,8 +656,7 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 			'file' => '',
 			'version' => array('type' => 'dynamic', 'value' => Corky_Compiler_PHP::VERSION)
 		)
-	),
-	'dedup' => {$dedup}
+	)
 );
 
 /* =========== data boilerplate =========== */
@@ -672,15 +666,6 @@ final class Corky_Compiler_PHP extends Corky_Compiler {
 
 /* =========== code to execute ============ */
 PHP;
-	}
-	
-	function get_code(){
-		if(!$this->code)
-		{
-			$this->compile();
-		}
-		
-		return $this->code;
 	}
 	
 	function execute(array $argv = array()){
