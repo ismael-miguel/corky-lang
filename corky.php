@@ -229,65 +229,145 @@ final class Corky_Lexer {
 		if(!$methods)
 		{
 			$methods = array(
-				'last' => function(&$value, &$token, &$iterator, $throw){
+				'last' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
 					if($iterator->valid() !== !$value)
 					{
-						if($throw)
-						{
-							throw new Corky_Exception_Lexer_Syntax_Error('can\'t be the last token', $token['line'], $token);
-						}
-						return false;
+						return self::assert_throw((!!$value ? 'must' : 'can\'t') . ' be the first token', $token['line'], $token, $throw);
 					}
 					return true;
 				},
-				'arg' => function(&$value)use(&$value, &$token, &$iterator, $throw){
+				'first' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
+					if(
+						($value && $iterator->key() > 0)
+						|| (!$value && $iterator->key() === 0)
+					)
+					{
+						return self::assert_throw(($value ? 'must' : 'can\'t') . ' be the first token', $token['line'], $token, $throw);
+					}
+					return true;
+				},
+				'prev' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
+					return $methods['after']($value, $token, $iterator, $throw);
+				},
+				'after' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
+					$first = false;
+					if(!$methods['first']($first, $token, $iterator, $throw))
+					{
+						return false;
+					}
+					
+					$key = $iterator->key();
+					$iterator->seek($key - 1);
+					$prev = $iterator->current();
+					$iterator->next();
+					
+					if(is_string($value))
+					{
+						return $value !== $prev['token']
+							? self::assert_throw('must be the after :' . $value . ' token', $token['line'], $token, $throw)
+							: true;
+					}
+					elseif(is_array($value))
+					{
+						if(count(array_filter(array_keys($value), 'is_numeric')))
+						{
+							return !in_array($prev['token'], $value)
+								? self::assert_throw('must be after ' . $value . ' token', $token['line'], $token, $throw)
+								: true;
+						}
+						else
+						{
+							foreach($value as $value_name => &$value_value)
+							{
+								return $value_value !== $prev[$value_name]
+									? self::assert_throw(
+										'previous ' . $value_name . ' must be ' . $value_value . ', ' . $value_name . ' ' . $prev[$value_name] . ' given',
+										$token['line'], $token, $throw
+									)
+									: true;
+							}
+						}
+					}
+					return true;
+				},
+				'next' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
+					return $methods['before']($value, $token, $iterator, $throw);
+				},
+				'before' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
+					$last = false;
+					if(!$methods['last']($last, $token, $iterator, $throw))
+					{
+						return false;
+					}
+					
+					$key = $iterator->key();
+					$iterator->next();
+					$next = $iterator->current();
+					$iterator->seek($key - 1);
+					
+					if(is_string($value))
+					{
+						return $value !== $prev['token']
+							? self::assert_throw('must be the before :' . $value . ' token', $token['line'], $token, $throw)
+							: true;
+					}
+					elseif(is_array($value))
+					{
+						if(count(array_filter(array_keys($value), 'is_numeric')))
+						{
+							return !in_array($prev['token'], $value)
+								? self::assert_throw('must be before ' . $value . ' token', $token['line'], $token, $throw)
+								: true;
+						}
+						else
+						{
+							foreach($value as $value_name => &$value_value)
+							{
+								return $value_value !== $prev[$value_name]
+									? self::assert_throw(
+										'next ' . $value_name . ' must be ' . $value_value . ', ' . $value_name . ' ' . $prev[$value_name] . ' given',
+										$token['line'], $token, $throw
+									)
+									: true;
+							}
+						}
+					}
+					return true;
+				},
+				'arg' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
 					if(is_bool($value))
 					{
 						if($value && (!isset($token['arg']) || !$token['arg']))
 						{
-							if($throw)
-							{
-								throw new Corky_Exception_Lexer_Syntax_Error('argument required', $token['line'], $token);
-							}
-							return false;
+							return self::assert_throw('argument required', $token['line'], $token, $throw);
 						}
 						elseif(!$value && (isset($token['arg']) || $token['arg']))
 						{
-							if($throw)
-							{
-								throw new Corky_Exception_Lexer_Syntax_Error('argument not allowed', $token['line'], $token);
-							}
-							return false;
+							return self::assert_throw('argument not allowed', $token['line'], $token, $throw);
 						}
 					}
 					elseif(is_array($value))
 					{
 						if(!isset($token['arg']) || !$token['arg'])
 						{
-							if($throw)
-							{
-								throw new Corky_Exception_Lexer_Syntax_Error('argument required', $token['line'], $token);
-							}
-							return false;
+							return self::assert_throw('argument required', $token['line'], $token, $throw);
 						}
 						
 						foreach($value as $rule_name => &$rule_value)
 						{
 							if(!is_array($rule_value) && $rule_value !== $token['arg'][$rule_name])
 							{
-								if($throw)
-								{
-									throw new Corky_Exception_Lexer_Syntax_Error('argument with ' . $rule_name . ' of ' . $rule_value . ' expected, ' . $rule_name . ' ' . $token['arg'][$rule_name] . ' given', $token['line'], $token);
-								}
-								return false;
+								return self::assert_throw(
+									'argument with ' . $rule_name . ' of ' . $rule_value . ' expected, ' . $rule_name . ' ' . $token['arg'][$rule_name] . ' given',
+									$token['line'], $token, $throw
+								);
 							}
 							elseif(is_array($rule_value) && in_array($token['arg'][$rule_name], $rule_value))
 							{
-								if($throw)
-								{
-									throw new Corky_Exception_Lexer_Syntax_Error('argument with ' . $rule_name . ' in (' . implode(', ', $rule_value) . ') expected; ' . $rule_name . ' ' . $token['arg'][$rule_name] . ' given', $token['line'], $token);
-								}
-								return false;
+								return self::assert_throw(
+									'argument with ' . $rule_name . ' in (' . implode(', ', $rule_value) . ') expected; ' . $rule_name . ' ' . $token['arg'][$rule_name] . ' given',
+									$token['line'], $token, $throw
+								);
 							}
 						}
 					}
@@ -309,43 +389,40 @@ final class Corky_Lexer {
 			{
 				if($rule_value && (!isset($token[$rule_name]) || !$token[$rule_name]))
 				{
-					if($throw)
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' required, none given', $token['line'], $token);
-					}
-					return false;
+					return self::assert_throw('token ' . $rule_name . ' required, none given', $token['line'], $token, $throw);
 				}
 				elseif(!$rule_value && (isset($token[$rule_name]) || $token[$rule_name]))
 				{
-					if($throw)
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' not allowed', $token['line'], $token);
-					}
-					return false;
+					return self::assert_throw('token ' . $rule_name . ' not allowed', $token['line'], $token, $throw);
 				}
 			}
 			elseif(is_array($rule_value))
 			{
 				if(!in_array($token[$rule_name], $rule_value))
 				{
-					if($throw)
-					{
-						throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' in (' . implode(', ', $rule_value) . ') expected; ' . $rule_name . ' ' . $token[$rule_name] . ' given', $token['line'], $token);
-					}
-					return false;
+					return self::assert_throw(
+						'expected token ' . $rule_name . ' in (' . implode(', ', $rule_value) . '); ' . $rule_name . ' ' . $token[$rule_name] . ' given',
+						$token['line'], $token, $throw
+					);
 				}
 			}
 			elseif($rule_value != $token[$rule_name])
 			{
-				if($throw)
-				{
-					throw new Corky_Exception_Lexer_Syntax_Error($rule_name . ' required to be ' . $rule_value . ', ' . $rule_name . ' ' . $token[$rule_name] . ' given', $token['line'], $token);
-				}
-				return false;
+				return self::assert_throw(
+					'token ' . $rule_name . ' required to be ' . $rule_value . ', ' . $rule_name . ' ' . $token[$rule_name] . ' given',
+					$token['line'], $token, $throw
+				);
 			}
 		}
-		
 		return true;
+	}
+	
+	private static function assert_throw($message, $line, &$token, $throw) {
+		if($throw)
+		{
+			throw new Corky_Exception_Lexer_Syntax_Error($message, $token['line'], $token);
+		}
+		return false;
 	}
 	
 	private static function get_values(ArrayIterator &$iterator, $reset = false) {
@@ -394,16 +471,28 @@ final class Corky_Lexer {
 					);
 					
 					$iterator->next();
-					$next = $iterator->current();
 					
 					if(
-						self::assert($next, array('token' => 'format', 'group' => 'modifier'), $iterator, false)
+						isset($token['arg'])
+						&& self::assert($token, array('arg' => array('type' => 'text')), $iterator, false)
 					)
 					{
-						self::assert($next, array('arg' => array('type' => array(null, 'text'))), $iterator);
+						$tree['format'] = $token['arg']['value'];
 						
-						$tree['format'] = $next['arg']['value'];
-						$iterator->next();
+						// do not allow a :format after!
+						self::assert($iterator->current(), array('group' => 'value'), $iterator);
+					}
+					else
+					{
+						$next = $iterator->current();
+						
+						if(self::assert($next, array('token' => 'format', 'group' => 'modifier'), $iterator, false))
+						{
+							self::assert($next, array('arg' => array('type' => 'text')), $iterator);
+							
+							$tree['format'] = $next['arg']['value'];
+							$iterator->next();
+						}
 					}
 					
 					$tree['args'] = self::get_values($iterator);
@@ -414,6 +503,14 @@ final class Corky_Lexer {
 					}
 					
 					return $tree;
+				},
+				'format' => function(&$token, &$iterator){
+					self::assert($token, array('arg' => 'text', 'after' => 'echo'), $iterator);
+					
+					return array(
+						'token' => $token,
+						'value' => $token['arg']
+					);
 				},
 				'const' => function(&$token, &$iterator){
 					self::assert($token, array('arg' => true), $iterator);
