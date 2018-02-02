@@ -232,7 +232,7 @@ final class Corky_Lexer {
 				'last' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
 					if($iterator->valid() !== !$value)
 					{
-						return self::assert_throw((!!$value ? 'must' : 'can\'t') . ' be the first token', $token['line'], $token, $throw);
+						return self::assert_throw((!!$value ? 'must' : 'can\'t') . ' be the last token', $token['line'], $token, $throw);
 					}
 					return true;
 				},
@@ -303,11 +303,11 @@ final class Corky_Lexer {
 					$key = $iterator->key();
 					$iterator->next();
 					$next = $iterator->current();
-					$iterator->seek($key - 1);
+					$iterator->seek($key);
 					
 					if(is_string($value))
 					{
-						return $value !== $prev['token']
+						return $value !== $next['token']
 							? self::assert_throw('must be the before :' . $value . ' token', $token['line'], $token, $throw)
 							: true;
 					}
@@ -315,7 +315,7 @@ final class Corky_Lexer {
 					{
 						if(count(array_filter(array_keys($value), 'is_numeric')))
 						{
-							return !in_array($prev['token'], $value)
+							return !in_array($next['token'], $value)
 								? self::assert_throw('must be before ' . $value . ' token', $token['line'], $token, $throw)
 								: true;
 						}
@@ -323,9 +323,9 @@ final class Corky_Lexer {
 						{
 							foreach($value as $value_name => &$value_value)
 							{
-								return $value_value !== $prev[$value_name]
+								return $value_value !== $next[$value_name]
 									? self::assert_throw(
-										'next ' . $value_name . ' must be ' . $value_value . ', ' . $value_name . ' ' . $prev[$value_name] . ' given',
+										'next ' . $value_name . ' must be ' . $value_value . ', ' . $value_name . ' ' . $next[$value_name] . ' given',
 										$token['line'], $token, $throw
 									)
 									: true;
@@ -464,13 +464,13 @@ final class Corky_Lexer {
 		{
 			$methods = array(
 				'echo' => function(&$token, &$iterator){
+					$iterator->next();
+					
 					self::assert($token, array('last' => false), $iterator);
 					
 					$tree = array(
 						'token' => $token
 					);
-					
-					$iterator->next();
 					
 					if(
 						isset($token['arg'])
@@ -512,6 +512,14 @@ final class Corky_Lexer {
 						'value' => $token['arg']
 					);
 				},
+				'store' => function(&$token, &$iterator){
+					self::assert($token, array('arg' => 'text', 'after' => 'var'), $iterator);
+					
+					return array(
+						'token' => $token,
+						'value' => $token['arg']
+					);
+				},
 				'const' => function(&$token, &$iterator){
 					self::assert($token, array('arg' => true), $iterator);
 					
@@ -533,7 +541,8 @@ final class Corky_Lexer {
 					self::assert($type,
 						array(
 							'last' => false,
-							'group' => array('data_type', 'data_structure')
+							'group' => array('data_type', 'data_structure'),
+							'next' => 'var'
 						),
 						$iterator
 					);
@@ -541,12 +550,10 @@ final class Corky_Lexer {
 					$iterator->next();
 					$var = $iterator->current();
 					
-					self::assert($var, array('token' => 'var'), $iterator);
-					
 					$tree = array('token' => $token, 'type' => $type['token'], 'arg' => $var);
 					
 					// last token, no value stored
-					if(self::assert($var, array('last' => true), $iterator, false))
+					if(!self::assert($var, array('next' => 'store'), $iterator, false))
 					{
 						return $tree;
 					}
@@ -554,22 +561,10 @@ final class Corky_Lexer {
 					$iterator->next();
 					$store = $iterator->current();
 					
-					// next token isn't a "store" token
-					if(!self::assert($store, array('token' => 'store', 'group' => 'modifier'), $iterator, false))
-					{
-						// roll back! (there's no ArrayIterator->prev() method ???)
-						$iterator->seek($iterator->key() - 1);
-						return $tree;
-					}
-					
-					self::assert($store, array('last' => false), $iterator);
+					self::assert($store, array('next' => array('group' => 'value')), $iterator);
 					
 					$iterator->next();
-					$value = $iterator->current();
-					
-					self::assert($value, array('group' => 'value'), $iterator);
-					
-					$tree['store'] = $value;
+					$tree['store'] = $iterator->current();
 					
 					return $tree;
 				}
