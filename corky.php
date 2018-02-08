@@ -234,6 +234,17 @@ final class Corky_Lexer {
 					{
 						return self::assert_throw((!!$value ? 'must' : 'can\'t') . ' be the last token', $token['line'], $token, $throw);
 					}
+					
+					$key = $iterator->key();
+					$iterator->next();
+					$valid = $iterator->valid();
+					$iterator->seek($key);
+					
+					if($valid !== !$value)
+					{
+						return self::assert_throw((!!$value ? 'must' : 'can\'t') . ' be the last token', $token['line'], $token, $throw);
+					}
+					
 					return true;
 				},
 				'first' => function(&$value, &$token, &$iterator, $throw)use(&$methods){
@@ -362,7 +373,7 @@ final class Corky_Lexer {
 									$token['line'], $token, $throw
 								);
 							}
-							elseif(is_array($rule_value) && in_array($token['arg'][$rule_name], $rule_value))
+							elseif(is_array($rule_value) && !in_array($token['arg'][$rule_name], $rule_value))
 							{
 								return self::assert_throw(
 									'argument with ' . $rule_name . ' in (' . implode(', ', $rule_value) . ') expected; ' . $rule_name . ' ' . $token['arg'][$rule_name] . ' given',
@@ -521,7 +532,7 @@ final class Corky_Lexer {
 					);
 				},
 				'const' => function(&$token, &$iterator){
-					self::assert($token, array('arg' => true), $iterator);
+					self::assert($token, array('arg' => array('type' => array('text', 'static', 'dynamic'))), $iterator);
 					
 					return array(
 						'token' => $token,
@@ -565,6 +576,7 @@ final class Corky_Lexer {
 					
 					$iterator->next();
 					$tree['store'] = $iterator->current();
+					self::assert($tree['store'], array('arg' => array('type' => array('text', 'static', 'dynamic'))), $iterator);
 					
 					return $tree;
 				}
