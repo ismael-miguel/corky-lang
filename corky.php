@@ -475,9 +475,9 @@ final class Corky_Lexer {
 		{
 			$methods = array(
 				'echo' => function(&$token, &$iterator){
-					$iterator->next();
-					
 					self::assert($token, array('last' => false), $iterator);
+					
+					$iterator->next();
 					
 					$tree = array(
 						'token' => $token
