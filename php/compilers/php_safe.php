@@ -1,6 +1,6 @@
 <?php
 
-final class Corky_Exception_Compiler_PHP_Runtime extends Corky_Exception {
+final class Corky_Exception_Compiler_PHP_Safe_Runtime extends Corky_Exception {
 	public function __construct($message, $line = 0) {
 		$this->message = $message;
 		$this->line = +$line;
@@ -8,7 +8,7 @@ final class Corky_Exception_Compiler_PHP_Runtime extends Corky_Exception {
 	}
 }
 
-final class Corky_Compiler_PHP extends Corky_Compiler {
+final class Corky_Compiler_PHP_Safe extends Corky_Compiler {
 	const VERSION = 0.1;
 	
 	// stores the compiled PHP lambda
@@ -210,4 +210,4 @@ final class Corky_Compiler_PHP_Runtime {
 	}
 }
 
-Corky::define_lang('php', 'Corky_Compiler_PHP');
+Corky::define_lang('php_safe', 'Corky_Compiler_PHP_Safe');
